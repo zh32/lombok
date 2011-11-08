@@ -31,6 +31,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,14 +41,14 @@ import lombok.AccessLevel;
 import lombok.Data;
 import lombok.Getter;
 import lombok.Lombok;
-import lombok.core.AnnotationValues;
 import lombok.core.AST.Kind;
+import lombok.core.AnnotationValues;
 import lombok.core.AnnotationValues.AnnotationValue;
-import lombok.eclipse.EclipseAST;
-import lombok.eclipse.EclipseNode;
 import lombok.core.TransformationsUtil;
 import lombok.core.TypeLibrary;
 import lombok.core.TypeResolver;
+import lombok.eclipse.EclipseAST;
+import lombok.eclipse.EclipseNode;
 
 import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.IStatus;
@@ -639,41 +640,34 @@ public class EclipseHandlerUtil {
 		final Annotation annotation = (Annotation) annotationNode.get();
 		Map<String, AnnotationValue> values = new HashMap<String, AnnotationValue>();
 		
-		final MemberValuePair[] pairs = annotation.memberValuePairs();
-		for (Method m : type.getDeclaredMethods()) {
-			if (!Modifier.isPublic(m.getModifiers())) continue;
-			String name = m.getName();
+		List<String> usedMethodNames = new ArrayList<String>();
+		MemberValuePair[] pairs = annotation.memberValuePairs();
+		if (pairs != null) for (MemberValuePair pair : annotation.memberValuePairs()) {
 			List<String> raws = new ArrayList<String>();
 			List<Object> expressionValues = new ArrayList<Object>();
 			List<Object> guesses = new ArrayList<Object>();
-			Expression fullExpression = null;
+			Expression fullExpression = pair.value;
 			Expression[] expressions = null;
 			
-			if (pairs != null) for (MemberValuePair pair : pairs) {
-				char[] n = pair.name;
-				String mName = n == null ? "value" : new String(pair.name);
-				if (mName.equals(name)) fullExpression = pair.value;
-			}
-			
-			boolean isExplicit = fullExpression != null;
-			
-			if (isExplicit) {
-				if (fullExpression instanceof ArrayInitializer) {
-					expressions = ((ArrayInitializer)fullExpression).expressions;
-				} else expressions = new Expression[] { fullExpression };
-				if (expressions != null) for (Expression ex : expressions) {
-					StringBuffer sb = new StringBuffer();
-					ex.print(0, sb);
-					raws.add(sb.toString());
-					expressionValues.add(ex);
-					guesses.add(calculateValue(ex));
-				}
+			if (fullExpression instanceof ArrayInitializer) {
+				expressions = ((ArrayInitializer)fullExpression).expressions;
+			} else expressions = new Expression[] { fullExpression };
+			if (expressions != null) for (Expression ex : expressions) {
+				StringBuffer sb = new StringBuffer();
+				ex.print(0, sb);
+				raws.add(sb.toString());
+				expressionValues.add(ex);
+				guesses.add(calculateValue(ex));
 			}
 			
 			final Expression fullExpr = fullExpression;
 			final Expression[] exprs = expressions;
 			
-			values.put(name, new AnnotationValue(annotationNode, raws, expressionValues, guesses, isExplicit) {
+			String name = pair.name == null ? "value" : new String(pair.name);
+			
+			usedMethodNames.add(name);
+			
+			values.put(name, new AnnotationValue(annotationNode, raws, expressionValues, guesses, true) {
 				@Override public void setError(String message, int valueIdx) {
 					Expression ex;
 					if (valueIdx == -1) ex = fullExpr;
@@ -698,6 +692,22 @@ public class EclipseHandlerUtil {
 					int sourceEnd = ex.sourceEnd;
 					
 					annotationNode.addWarning(message, sourceStart, sourceEnd);
+				}
+			});
+		}
+		
+		for (Method m : type.getDeclaredMethods()) {
+			if (!Modifier.isPublic(m.getModifiers())) continue;
+			String name = m.getName();
+			if (usedMethodNames.contains(name)) continue;
+			
+			values.put(name, new AnnotationValue(annotationNode, Collections.<String>emptyList(), Collections.<Object>emptyList(), Collections.<Object>emptyList(), false) {
+				@Override public void setError(String message, int valueIdx) {
+					annotationNode.addError(message);
+				}
+				
+				@Override public void setWarning(String message, int valueIdx) {
+					annotationNode.addWarning(message);
 				}
 			});
 		}
