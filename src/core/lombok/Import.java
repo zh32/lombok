@@ -21,5 +21,32 @@
  */
 package lombok;
 
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/**
+ * Put on any method or type to create an import alias that can be used within that method or type.
+ * 
+ * Example:
+ * <pre>
+ *     &#64;Import(AList = java.awt.List, UList = java.util.List, swt = org.eclipse.swt.widgets)
+ *     public class Test {
+ *         private UList<swt.Button> swtButtons = new ArrayList<swt.Button>();
+ *         
+ *         public swt.Button getFirst() {
+ *             AList listWidget = (AList) getWidget();
+ *             if (listWidget != null) return toButton(listWidget);
+ *             return swtButtons.get(0);
+ *         }
+ *     }
+ * </pre>
+ * 
+ * will replace all occurrences of {@code UList} with {@code java.util.List}, {@code swt.Button} with
+ * {@code org.eclipse.swt.widgets.Button}, and {@code AList} with {@code java.awt.List}.
+ */
+@Target({ElementType.METHOD, ElementType.TYPE})
+@Retention(RetentionPolicy.SOURCE)
 public @interface Import {
 }
