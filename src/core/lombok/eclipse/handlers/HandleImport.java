@@ -35,7 +35,7 @@ import org.eclipse.jdt.internal.compiler.ASTVisitor;
 import org.eclipse.jdt.internal.compiler.ast.AbstractMethodDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.Annotation;
 import org.eclipse.jdt.internal.compiler.ast.ArrayTypeReference;
-import org.eclipse.jdt.internal.compiler.ast.MarkerAnnotation;
+import org.eclipse.jdt.internal.compiler.ast.NormalAnnotation;
 import org.eclipse.jdt.internal.compiler.ast.ParameterizedQualifiedTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.ParameterizedSingleTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.QualifiedTypeReference;
@@ -67,10 +67,8 @@ public class HandleImport extends EclipseAnnotationHandler<Import> {
 		
 		map = new HashMap<String, String>();
 		for (String mName : values.getMethodNames()) map.put(mName, values.getRawExpression(mName));
-		MarkerAnnotation newAnn;
-		annotationNode.up().replaceChildNode(ast, newAnn = new MarkerAnnotation(ast.type, ast.sourceStart));
-		annotations.put(newAnn, map);
 		annotations.put(ast, map);
+		if (ast instanceof NormalAnnotation) ((NormalAnnotation)ast).memberValuePairs = null;
 		
 		return map;
 	}
@@ -90,29 +88,7 @@ public class HandleImport extends EclipseAnnotationHandler<Import> {
 			}
 			
 			public boolean visit(ParameterizedQualifiedTypeReference typeRef, BlockScope scope) {
-				if (typeRef.tokens == null || typeRef.tokens.length == 0) return true;
-				String name = new String(typeRef.tokens[0]);
-				String repl0 = map.get(name);
-				if (repl0 == null) return true;
-				
-				String[] repl = repl0.split("\\.");
-				switch (repl.length) {
-				case 0:
-					break;
-				case 1:
-					typeRef.tokens[0] = repl[0].toCharArray();
-					break;
-				case 2:
-					char[][] old = typeRef.tokens;
-					typeRef.tokens = new char[old.length + repl.length - 1][];
-					System.arraycopy(old, 1, typeRef.tokens, repl.length, old.length - 1);
-					for (int i = 0; i < repl.length; i++) {
-						typeRef.tokens[i] = repl[i].toCharArray();
-					}
-					break;
-				}
-				
-				return true;
+				return visit((QualifiedTypeReference)typeRef, scope);
 			}
 			
 			@Override public boolean visit(QualifiedTypeReference typeRef, ClassScope scope) {
@@ -134,10 +110,16 @@ public class HandleImport extends EclipseAnnotationHandler<Import> {
 					break;
 				case 2:
 					char[][] old = typeRef.tokens;
+					long[] oldP = typeRef.sourcePositions;
 					typeRef.tokens = new char[old.length + repl.length - 1][];
+					typeRef.sourcePositions = new long[old.length + repl.length - 1];
 					System.arraycopy(old, 1, typeRef.tokens, repl.length, old.length - 1);
+					System.arraycopy(oldP, 1, typeRef.sourcePositions, repl.length, old.length - 1);
 					for (int i = 0; i < repl.length; i++) {
 						typeRef.tokens[i] = repl[i].toCharArray();
+					}
+					for (int i = 0; i < repl.length; i++) {
+						typeRef.sourcePositions[i] = typeRef.sourcePositions[repl.length];
 					}
 					break;
 				}
